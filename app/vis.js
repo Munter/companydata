@@ -1,56 +1,43 @@
-/*global d3*/
-d3.tsv("data.tsv", function(error, data) {
-  color.domain(d3.keys(data[0]).filter(function(key) { return key !== "date"; }));
+/*global d3, Plottable*/
+d3.json('data/livsforloeb.json', function (error, data) {
+    var parseDate = d3.time.format('%Y-%m-%d').parse;
 
-  data.forEach(function(d) {
-    d.date = parseDate(d.date);
-  });
+    var companies = Object.keys(data).map(function (key) {
+        return data[key].filter(function (item, idx) {
+            return !(idx % 10000);
+        }).map(function (point) {
+            return {
+                date: parseDate(point.date),
+                value: point.value,
+                name: key
+            };
+        });
+    });
 
-  var cities = color.domain().map(function(name) {
-    return {
-      name: name,
-      values: data.map(function(d) {
-        return {date: d.date, temperature: +d[name]};
-      })
-    };
-  });
+    console.log(companies);
 
-  x.domain(d3.extent(data, function(d) { return d.date; }));
+    var xScale     = new Plottable.Scale.Time();
+    var yScale     = new Plottable.Scale.Linear();
+    var colorScale = new Plottable.Scale.Color('10');
 
-  y.domain([
-    d3.min(cities, function(c) { return d3.min(c.values, function(v) { return v.temperature; }); }),
-    d3.max(cities, function(c) { return d3.max(c.values, function(v) { return v.temperature; }); })
-  ]);
+    var xAxis  = new Plottable.Axis.Time(xScale, 'bottom');
+    var yAxis  = new Plottable.Axis.Numeric(yScale, 'left');
+    var yLabel = new Plottable.Component.Label('Amount', 'left');
+    var legend = new Plottable.Component.Legend(colorScale);
 
-  svg.append("g")
-      .attr("class", "x axis")
-      .attr("transform", "translate(0," + height + ")")
-      .call(xAxis);
+    var plots = companies.map(function (point) {
+        return new Plottable.Plot.Line(xScale, yScale)
+          .addDataset(point)
+          .project('x', 'date', xScale)
+          .project('y', 'value', yScale)
+          .project('stroke', colorScale.scale(point[0].name))
+          .project('stroke-width', 1);
+    });
 
-  svg.append("g")
-      .attr("class", "y axis")
-      .call(yAxis)
-    .append("text")
-      .attr("transform", "rotate(-90)")
-      .attr("y", 6)
-      .attr("dy", ".71em")
-      .style("text-anchor", "end")
-      .text("Temperature (ºF)");
-
-  var city = svg.selectAll(".city")
-      .data(cities)
-    .enter().append("g")
-      .attr("class", "city");
-
-  city.append("path")
-      .attr("class", "line")
-      .attr("d", function(d) { return line(d.values); })
-      .style("stroke", function(d) { return color(d.name); });
-
-  city.append("text")
-      .datum(function(d) { return {name: d.name, value: d.values[d.values.length - 1]}; })
-      .attr("transform", function(d) { return "translate(" + x(d.value.date) + "," + y(d.value.temperature) + ")"; })
-      .attr("x", 3)
-      .attr("dy", ".35em")
-      .text(function(d) { return d.name; });
+    var gridlines = new Plottable.Component.Gridlines(xScale, yScale);
+    var center    = new Plottable.Component.Group(plots).merge(gridlines).merge(legend);
+    var table     = new Plottable.Component.Table([[yLabel, yAxis, center], [null, null, xAxis]]).renderTo(d3.select('svg#livsforloeb'));
+    var panZoom   = new Plottable.Interaction.PanZoom(xScale, null);
+    center.registerInteraction(panZoom);
 });
+
